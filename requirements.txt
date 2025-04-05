@@ -1,6 +1,8 @@
 dash
 dash-bootstrap-components
-pymysql
 pandas
 sqlalchemy
+pymysql
 psycopg2-binary
+python-dotenv
+plotly
