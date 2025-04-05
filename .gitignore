@@ -1,4 +1,11 @@
+<<<<<<< HEAD
 __pycache__/
 .env
 *.pyc
 .DS_Store
+=======
+__pycache__/
+.env
+*.pyc
+.DS_Store
+>>>>>>> 2b00b7546286852222761ac453d7f5853fbaa2d5
