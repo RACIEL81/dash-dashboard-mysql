@@ -3,3 +3,4 @@ dash-bootstrap-components
 pymysql
 pandas
 sqlalchemy
+psycopg2-binary
