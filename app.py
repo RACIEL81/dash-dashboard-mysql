@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from sqlalchemy import create_engine
 import dash
@@ -5,41 +6,62 @@ import dash_bootstrap_components as dbc
 from dash import dcc, html
 import plotly.graph_objects as go
 from dash.dependencies import Input, Output
+from dotenv import load_dotenv  # Para desarrollo local
 
-# Conexión a MySQL
-DB_USER = "root"
-DB_PASSWORD = "123456"
-DB_HOST = "localhost"
-DB_NAME = "mi_base_de_datos"
+# Cargar variables de entorno
+load_dotenv()
 
+# Configuración de la base de datos (usa variables de entorno)
 def cargar_datos():
     try:
-        engine = create_engine(f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}")
+        # Conexión para Render (PostgreSQL por defecto)
+        DATABASE_URL = os.environ.get('DATABASE_URL')
+        
+        # Si no hay DATABASE_URL, intenta con MySQL (para desarrollo local)
+        if not DATABASE_URL:
+            DB_USER = os.getenv('DB_USER', 'root')
+            DB_PASSWORD = os.getenv('DB_PASSWORD', '123456')
+            DB_HOST = os.getenv('DB_HOST', 'localhost')
+            DB_NAME = os.getenv('DB_NAME', 'mi_base_de_datos')
+            DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+        
+        # Ajustar la URL para PostgreSQL si es necesario
+        if DATABASE_URL.startswith("postgres://"):
+            DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        
+        engine = create_engine(DATABASE_URL)
         df = pd.read_sql_query("SELECT * FROM mi_tabla", engine)
+        
+        # Verificar columnas necesarias
+        columnas_necesarias = {'analisis', 'total_po', 'ciudad', 'aliado', 'región'}
+        if not columnas_necesarias.issubset(set(df.columns)):
+            raise ValueError(f"Faltan columnas necesarias. Columnas disponibles: {df.columns}")
+        
         df.columns = df.columns.str.lower().str.strip()
+        df['porcentaje'] = (df['analisis'].sum() / df['total_po'].sum()) * 100
         return df
+        
     except Exception as err:
-        print(f"Error de MySQL: {err}")
-        return None
+        print(f"Error al cargar datos: {err}")
+        # Puedes cargar datos de respaldo desde un CSV si la conexión falla
+        try:
+            df_backup = pd.read_csv('data_backup.csv')
+            print("Usando datos de respaldo local")
+            return df_backup
+        except:
+            raise ValueError("No se pudieron cargar los datos desde la base de datos ni desde respaldo local")
 
 df = cargar_datos()
-if df is None:
-    raise ValueError("No se pudieron cargar los datos desde MySQL.")
-
-columnas_necesarias = {'analisis', 'total_po', 'ciudad', 'aliado', 'región'}
-if not columnas_necesarias.issubset(set(df.columns)):
-    raise ValueError(f"Faltan columnas necesarias en la base de datos. Columnas disponibles: {df.columns}")
-
-df['porcentaje'] = (df['analisis'].sum() / df['total_po'].sum()) * 100
 
 # Inicializar app Dash
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SOLAR])
+server = app.server  # Necesario para Render
 
-# Diseño de la app
+# Diseño de la app (igual que tu versión original)
 app.layout = dbc.Container([
     # Logo
     dbc.Row([
-        dbc.Col(html.Img(src="assets/claro_logo.png", height="60px"), width=12, className="text-center mb-3")
+        dbc.Col(html.Img(src=app.get_asset_url('claro_logo.png'), height="60px"), width=12, className="text-center mb-3")
     ]),
 
     # Tarjetas de resumen
@@ -91,7 +113,7 @@ app.layout = dbc.Container([
     ])
 ], fluid=True, style={'backgroundColor': '#C3131F'})
 
-# Callbacks
+# Callbacks (igual que tu versión original)
 @app.callback(
     [Output('resultado-porcentaje', 'children'),
      Output('publico-objetivo', 'children'),
@@ -179,8 +201,8 @@ def actualizar_dashboard(ciudad, aliado, region):
         height=500
     )
     
-    ciudades_options = [{'label': c, 'value': c} for c in df_filtrado['ciudad'].unique()]
-    aliados_options = [{'label': a, 'value': a} for a in df_filtrado['aliado'].unique()]
+    ciudades_options = [{'label': c, 'value': c} for c in df['ciudad'].unique()]
+    aliados_options = [{'label': a, 'value': a} for a in df['aliado'].unique()]
     regiones_options = [{'label': r, 'value': r} for r in df['región'].unique()]
     
     return (f"{porcentaje:.2f}%", 
@@ -194,4 +216,4 @@ def actualizar_dashboard(ciudad, aliado, region):
             regiones_options)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run_server(debug=os.environ.get('DEBUG', 'False') == 'True')
